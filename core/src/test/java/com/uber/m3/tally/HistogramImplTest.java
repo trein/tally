@@ -218,6 +218,28 @@ public class HistogramImplTest {
     }
 
     @Test
+    public void snapshotValuesIsIdempotent() {
+        ValueBuckets buckets = ValueBuckets.custom(0, 10);
+
+        histogram =
+                new HistogramImpl(
+                        scope,
+                        "",
+                        null,
+                        buckets
+                );
+
+        histogram.recordValue(5);
+
+        Map<Double, Long> snapshot = histogram.snapshotValues();
+        assertEquals(1, snapshot.get(10D).longValue());
+
+        // snapshot again to ensure the first snapshot didn't mutate internal state
+        snapshot = histogram.snapshotValues();
+        assertEquals(1, snapshot.get(10D).longValue());
+    }
+
+    @Test
     public void snapshotDurations() {
         Buckets buckets = DurationBuckets.linear(Duration.ZERO, Duration.ofMillis(10), 5);
 
@@ -246,5 +268,27 @@ public class HistogramImplTest {
         expectedMap.put(Duration.MAX_VALUE, 5L);
 
         assertEquals(expectedMap, histogram.snapshotDurations());
+    }
+
+    @Test
+    public void snapshotDurationsIsIdempotent() {
+        DurationBuckets buckets = DurationBuckets.custom(Duration.ofMillis(0), Duration.ofMillis(10));
+
+        histogram =
+                new HistogramImpl(
+                        scope,
+                        "",
+                        null,
+                        buckets
+                );
+
+        histogram.recordDuration(Duration.ofMillis(5));
+
+        Map<Duration, Long> snapshot = histogram.snapshotDurations();
+        assertEquals(1, snapshot.get(Duration.ofMillis(10)).longValue());
+
+        // snapshot again to ensure the first snapshot didn't mutate internal state
+        snapshot = histogram.snapshotDurations();
+        assertEquals(1, snapshot.get(Duration.ofMillis(10)).longValue());
     }
 }

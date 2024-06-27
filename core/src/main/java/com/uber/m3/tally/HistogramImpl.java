@@ -145,8 +145,8 @@ class HistogramImpl extends MetricBase implements Histogram, StopwatchRecorder {
         return bucketIndex == 0 ? Double.MIN_VALUE : specification.getValueUpperBounds().get(bucketIndex - 1);
     }
 
-    private long getCounterValue(int index) {
-        return bucketCounters[index] != null ? bucketCounters[index].value() : 0;
+    private long snapshotCounterValue(int index) {
+        return bucketCounters[index] != null ? bucketCounters[index].snapshot() : 0;
     }
 
     // NOTE: Only used in testing
@@ -158,7 +158,7 @@ class HistogramImpl extends MetricBase implements Histogram, StopwatchRecorder {
         Map<Double, Long> values = new HashMap<>(bucketCounters.length, 1);
 
         for (int i = 0; i < bucketCounters.length; ++i) {
-            values.put(getUpperBoundValueForBucket(i), getCounterValue(i));
+            values.put(getUpperBoundValueForBucket(i), snapshotCounterValue(i));
         }
 
         return values;
@@ -172,7 +172,7 @@ class HistogramImpl extends MetricBase implements Histogram, StopwatchRecorder {
         Map<Duration, Long> durations = new HashMap<>(bucketCounters.length, 1);
 
         for (int i = 0; i < bucketCounters.length; ++i) {
-            durations.put(getUpperBoundDurationForBucket(i), getCounterValue(i));
+            durations.put(getUpperBoundDurationForBucket(i), snapshotCounterValue(i));
         }
 
         return durations;
