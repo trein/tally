@@ -55,6 +55,7 @@ public class ScopeBuilder {
     protected String separator = DEFAULT_SEPARATOR;
     protected ImmutableMap<String, String> tags;
     protected Buckets defaultBuckets = DEFAULT_SCOPE_BUCKETS;
+    protected MonotonicClock clock = MonotonicClock.system();
 
     private ScheduledExecutorService scheduler;
     private ScopeImpl.Registry registry;
@@ -125,6 +126,16 @@ public class ScopeBuilder {
      */
     public ScopeBuilder defaultBuckets(Buckets defaultBuckets) {
         this.defaultBuckets = defaultBuckets;
+        return this;
+    }
+
+    /**
+     * Updates the monotonic clock that should be used when measuring elapsed time.
+     * @param clock value to update to
+     * @return Builder with new param updated
+     */
+    public ScopeBuilder clock(MonotonicClock clock) {
+        this.clock = clock;
         return this;
     }
 

@@ -32,26 +32,25 @@ import java.util.Map;
  * Default implementation of a {@link Histogram}.
  */
 class HistogramImpl extends MetricBase implements Histogram, StopwatchRecorder {
+    private final MonotonicClock clock;
+    private final ScopeImpl scope;
     private final Type type;
-
     private final ImmutableMap<String, String> tags;
-
     private final ImmutableBuckets specification;
 
     // NOTE: Bucket counters are lazily initialized. Since ref updates are atomic in JMM,
     // no dedicated synchronization is used on the read path, only on the write path
     private final CounterImpl[] bucketCounters;
 
-    private final ScopeImpl scope;
-
     HistogramImpl(
+        MonotonicClock clock,
         ScopeImpl scope,
         String fqn,
         ImmutableMap<String, String> tags,
         Buckets buckets
     ) {
         super(fqn);
-
+        this.clock = clock;
         this.scope = scope;
         this.type = buckets instanceof DurationBuckets ? Type.DURATION : Type.VALUE;
         this.tags = tags;
@@ -122,7 +121,7 @@ class HistogramImpl extends MetricBase implements Histogram, StopwatchRecorder {
 
     @Override
     public Stopwatch start() {
-        return new Stopwatch(System.nanoTime(), this);
+        return new Stopwatch(clock.nowNanos(), this);
     }
 
     ImmutableMap<String, String> getTags() {
@@ -180,7 +179,7 @@ class HistogramImpl extends MetricBase implements Histogram, StopwatchRecorder {
 
     @Override
     public void recordStopwatch(long stopwatchStart) {
-        recordDuration(Duration.between(stopwatchStart, System.nanoTime()));
+        recordDuration(Duration.between(stopwatchStart, clock.nowNanos()));
     }
 
     enum Type {

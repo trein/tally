@@ -21,26 +21,19 @@
 package com.uber.m3.tally;
 
 import com.uber.m3.util.Duration;
-import org.junit.Before;
 import org.junit.Test;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
 
 public class TimerImplTest {
-    private TestStatsReporter reporter;
-    private TimerImpl timer;
-
-    @Before
-    public void setUp() {
-        reporter = new TestStatsReporter();
-        timer = new TimerImpl("", null, reporter);
-    }
+    private final MonotonicClock.FakeClock clock = MonotonicClock.fake();
+    private final TestStatsReporter reporter = new TestStatsReporter();
 
     @Test
     public void record() {
+        TimerImpl timer = new TimerImpl(clock, "", null, reporter);
+
         timer.record(Duration.ofMillis(42));
         assertEquals(Duration.ofMillis(42), reporter.nextTimerVal());
 
@@ -48,16 +41,15 @@ public class TimerImplTest {
         assertEquals(Duration.ofMinutes(2), reporter.nextTimerVal());
 
         Stopwatch stopwatch = timer.start();
+        clock.addDuration(Duration.ofMillis(200));
         stopwatch.stop();
 
-        Duration duration = reporter.nextTimerVal();
-        assertNotNull(duration);
-        assertTrue(duration.compareTo(Duration.ZERO) > 0);
+        assertEquals(Duration.ofMillis(200), reporter.nextTimerVal());
     }
 
     @Test
     public void noReporterSinkSnapshot() {
-        timer = new TimerImpl("no-reporter-timer", null, null);
+        TimerImpl timer = new TimerImpl(clock, "no-reporter-timer", null, null);
 
         StatsReporter sink = timer.new NoReporterSink();
 
@@ -73,25 +65,25 @@ public class TimerImplTest {
 
     @Test(expected = UnsupportedOperationException.class)
     public void unsupportedCounter() {
-        StatsReporter sink = new TimerImpl("", null, null).new NoReporterSink();
+        StatsReporter sink = new TimerImpl(clock, "", null, null).new NoReporterSink();
         sink.reportCounter(null, null, 0);
     }
 
     @Test(expected = UnsupportedOperationException.class)
     public void unsupportedGauge() {
-        StatsReporter sink = new TimerImpl("", null, null).new NoReporterSink();
+        StatsReporter sink = new TimerImpl(clock, "", null, null).new NoReporterSink();
         sink.reportGauge(null, null, 0);
     }
 
     @Test(expected = UnsupportedOperationException.class)
     public void unsupportedHistogramValue() {
-        StatsReporter sink = new TimerImpl("", null, null).new NoReporterSink();
+        StatsReporter sink = new TimerImpl(clock, "", null, null).new NoReporterSink();
         sink.reportHistogramValueSamples(null, null, null, 0, 0, 0);
     }
 
     @Test(expected = UnsupportedOperationException.class)
     public void unsupportedHistogramDuration() {
-        StatsReporter sink = new TimerImpl("", null, null).new NoReporterSink();
+        StatsReporter sink = new TimerImpl(clock, "", null, null).new NoReporterSink();
         sink.reportHistogramDurationSamples(null, null, null, null, null, 0);
     }
 }

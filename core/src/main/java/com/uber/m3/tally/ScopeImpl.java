@@ -35,14 +35,15 @@ import java.util.concurrent.ScheduledExecutorService;
  * Default {@link Scope} implementation.
  */
 class ScopeImpl implements Scope, TestScope {
-    private StatsReporter reporter;
-    private String prefix;
-    private String separator;
-    private ImmutableMap<String, String> tags;
-    private Buckets defaultBuckets;
+    private final StatsReporter reporter;
+    private final String prefix;
+    private final String separator;
+    private final ImmutableMap<String, String> tags;
+    private final Buckets defaultBuckets;
+    private final MonotonicClock clock;
 
-    private ScheduledExecutorService scheduler;
-    private Registry registry;
+    private final ScheduledExecutorService scheduler;
+    private final Registry registry;
 
     private final ConcurrentHashMap<String, CounterImpl> counters = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, GaugeImpl> gauges = new ConcurrentHashMap<>();
@@ -62,41 +63,43 @@ class ScopeImpl implements Scope, TestScope {
         this.separator = builder.separator;
         this.tags = builder.tags;
         this.defaultBuckets = builder.defaultBuckets;
+        this.clock = builder.clock;
     }
 
     @Override
     public Counter counter(String name) {
         return counters.computeIfAbsent(name, ignored ->
-                // NOTE: This will called at most once
-                new CounterImpl(this, fullyQualifiedName(name))
+            // NOTE: This will be called at most once
+            new CounterImpl(this, fullyQualifiedName(name))
         );
     }
 
     @Override
     public Gauge gauge(String name) {
         return gauges.computeIfAbsent(name, ignored ->
-                // NOTE: This will called at most once
-                new GaugeImpl(this, fullyQualifiedName(name)));
+            // NOTE: This will be called at most once
+            new GaugeImpl(this, fullyQualifiedName(name)));
     }
 
     @Override
     public Timer timer(String name) {
         // Timers report directly to the {@code StatsReporter}, and therefore not added to reporting queue
         // i.e. they are not buffered
-        return timers.computeIfAbsent(name, ignored -> new TimerImpl(fullyQualifiedName(name), tags, reporter));
+        return timers.computeIfAbsent(name, ignored -> new TimerImpl(clock, fullyQualifiedName(name), tags, reporter));
     }
 
     @Override
     public Histogram histogram(String name, @Nullable Buckets buckets) {
         return histograms.computeIfAbsent(name, ignored ->
-                // NOTE: This will be called at most once
-                new HistogramImpl(
-                        this,
-                        fullyQualifiedName(name),
-                        tags,
-                        Optional.ofNullable(buckets)
-                                .orElse(defaultBuckets)
-                )
+            // NOTE: This will be called at most once
+            new HistogramImpl(
+                clock,
+                this,
+                fullyQualifiedName(name),
+                tags,
+                Optional.ofNullable(buckets)
+                    .orElse(defaultBuckets)
+            )
         );
     }
 
@@ -141,6 +144,7 @@ class ScopeImpl implements Scope, TestScope {
 
     /**
      * Reports using the specified reporter.
+     *
      * @param reporter the reporter to report
      */
     void report(StatsReporter reporter) {
@@ -179,9 +183,9 @@ class ScopeImpl implements Scope, TestScope {
 
         for (ScopeImpl subscope : scopes) {
             ImmutableMap<String, String> tags = new ImmutableMap.Builder<String, String>()
-                    .putAll(this.tags)
-                    .putAll(subscope.tags)
-                    .build();
+                .putAll(this.tags)
+                .putAll(subscope.tags)
+                .build();
 
             for (Map.Entry<String, CounterImpl> counter : subscope.counters.entrySet()) {
                 String name = subscope.fullyQualifiedName(counter.getKey());
@@ -189,12 +193,12 @@ class ScopeImpl implements Scope, TestScope {
                 ScopeKey scopeKey = keyForPrefixedStringMap(name, tags);
 
                 snap.counters().put(
-                        scopeKey,
-                        new CounterSnapshotImpl(
-                                name,
-                                tags,
-                                counter.getValue().snapshot()
-                        )
+                    scopeKey,
+                    new CounterSnapshotImpl(
+                        name,
+                        tags,
+                        counter.getValue().snapshot()
+                    )
                 );
             }
 
@@ -204,12 +208,12 @@ class ScopeImpl implements Scope, TestScope {
                 ScopeKey scopeKey = keyForPrefixedStringMap(name, tags);
 
                 snap.gauges().put(
-                        scopeKey,
-                        new GaugeSnapshotImpl(
-                                name,
-                                tags,
-                                gauge.getValue().snapshot()
-                        )
+                    scopeKey,
+                    new GaugeSnapshotImpl(
+                        name,
+                        tags,
+                        gauge.getValue().snapshot()
+                    )
                 );
             }
 
@@ -219,12 +223,12 @@ class ScopeImpl implements Scope, TestScope {
                 ScopeKey scopeKey = keyForPrefixedStringMap(name, tags);
 
                 snap.timers().put(
-                        scopeKey,
-                        new TimerSnapshotImpl(
-                                name,
-                                tags,
-                                timer.getValue().snapshot()
-                        )
+                    scopeKey,
+                    new TimerSnapshotImpl(
+                        name,
+                        tags,
+                        timer.getValue().snapshot()
+                    )
                 );
             }
 
@@ -234,13 +238,13 @@ class ScopeImpl implements Scope, TestScope {
                 ScopeKey scopeKey = keyForPrefixedStringMap(name, tags);
 
                 snap.histograms().put(
-                        scopeKey,
-                        new HistogramSnapshotImpl(
-                                name,
-                                tags,
-                                histogram.getValue().snapshotValues(),
-                                histogram.getValue().snapshotDurations()
-                        )
+                    scopeKey,
+                    new HistogramSnapshotImpl(
+                        name,
+                        tags,
+                        histogram.getValue().snapshotValues(),
+                        histogram.getValue().snapshotDurations()
+                    )
                 );
             }
         }
@@ -277,6 +281,7 @@ class ScopeImpl implements Scope, TestScope {
         return registry.subscopes.computeIfAbsent(
             key,
             (k) -> new ScopeBuilder(scheduler, registry)
+                .clock(clock)
                 .reporter(reporter)
                 .prefix(prefix)
                 .separator(separator)

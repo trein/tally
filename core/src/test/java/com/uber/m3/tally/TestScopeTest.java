@@ -21,6 +21,7 @@
 package com.uber.m3.tally;
 
 import com.uber.m3.util.ImmutableMap;
+import com.uber.m3.util.Duration;
 import org.junit.Test;
 
 import java.util.Map;
@@ -113,6 +114,55 @@ public class TestScopeTest {
         assertEquals("subscope.counter", counterSnapshot.name());
         assertEquals(subScopeTags, counterSnapshot.tags());
         assertEquals(1, counterSnapshot.value());
+    }
+
+    @Test
+    public void testCreateWithClock() {
+        Buckets buckets = DurationBuckets.linear(Duration.ZERO, Duration.ofMillis(10), 10);
+        MonotonicClock.FakeClock clock = MonotonicClock.fake();
+        TestScope testScope = TestScope.create(clock);
+
+        Stopwatch stopwatch = testScope.histogram("histogram", buckets).start();
+        clock.addDuration(Duration.ofMillis(15));
+        stopwatch.stop();
+
+        Snapshot snapshot = testScope.snapshot();
+        assertNotNull(snapshot);
+
+        Map<ScopeKey, HistogramSnapshot> histograms = snapshot.histograms();
+        assertNotNull(histograms);
+        assertEquals(1, histograms.size());
+
+        HistogramSnapshot histogramSnapshot = histograms.get(new ScopeKey("histogram", ImmutableMap.EMPTY));
+
+        assertNotNull(histogramSnapshot);
+        assertEquals("histogram", histogramSnapshot.name());
+        assertEquals(1, histogramSnapshot.durations().get(Duration.ofMillis(20)).longValue());
+    }
+
+    @Test
+    public void testCreateWithTagsAndClock() {
+        Buckets buckets = DurationBuckets.linear(Duration.ZERO, Duration.ofMillis(10), 10);
+        ImmutableMap<String, String> tags = ImmutableMap.of("key", "value");
+        MonotonicClock.FakeClock clock = MonotonicClock.fake();
+        TestScope testScope = TestScope.create("prefix", tags, clock);
+
+        Stopwatch stopwatch = testScope.histogram("histogram", buckets).start();
+        clock.addDuration(Duration.ofMillis(25));
+        stopwatch.stop();
+
+        Snapshot snapshot = testScope.snapshot();
+        assertNotNull(snapshot);
+
+        Map<ScopeKey, HistogramSnapshot> histograms = snapshot.histograms();
+        assertNotNull(histograms);
+        assertEquals(1, histograms.size());
+
+        HistogramSnapshot histogramSnapshot = histograms.get(new ScopeKey("prefix.histogram", tags));
+
+        assertNotNull(histogramSnapshot);
+        assertEquals("prefix.histogram", histogramSnapshot.name());
+        assertEquals(1, histogramSnapshot.durations().get(Duration.ofMillis(30)).longValue());
     }
 }
 

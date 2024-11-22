@@ -34,12 +34,14 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  * Default implementation of a {@link Timer}.
  */
 class TimerImpl implements Timer, StopwatchRecorder {
-    private String name;
-    private ImmutableMap<String, String> tags;
-    private StatsReporter reporter;
-    private Values unreported = new Values();
+    private final MonotonicClock clock;
+    private final String name;
+    private final ImmutableMap<String, String> tags;
+    private final StatsReporter reporter;
+    private final Values unreported = new Values();
 
-    TimerImpl(String name, ImmutableMap<String, String> tags, StatsReporter reporter) {
+    TimerImpl(MonotonicClock clock, String name, ImmutableMap<String, String> tags, StatsReporter reporter) {
+        this.clock = clock;
         this.name = name;
         this.tags = tags;
 
@@ -57,7 +59,7 @@ class TimerImpl implements Timer, StopwatchRecorder {
 
     @Override
     public Stopwatch start() {
-        return new Stopwatch(System.nanoTime(), this);
+        return new Stopwatch(clock.nowNanos(), this);
     }
 
     /**
@@ -66,7 +68,7 @@ class TimerImpl implements Timer, StopwatchRecorder {
      */
     @Override
     public void recordStopwatch(long stopwatchStart) {
-        record(Duration.between(stopwatchStart, System.nanoTime()));
+        record(Duration.between(stopwatchStart, clock.nowNanos()));
     }
 
     Duration[] snapshot() {

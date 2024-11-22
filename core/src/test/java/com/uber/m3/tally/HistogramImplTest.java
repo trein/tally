@@ -34,7 +34,6 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
 
 public class HistogramImplTest {
 
@@ -43,30 +42,29 @@ public class HistogramImplTest {
         225.0, 250.0, 300.0, 350.0, 400.0, 450.0, 500.0, 550.0, 600.0, 650.0, 700.0, 750.0, 800.0, 850.0, 900.0, 950.0, 1000.0
     };
 
-    private TestStatsReporter reporter;
+    private final MonotonicClock.FakeClock clock = MonotonicClock.fake();
+    private final TestStatsReporter reporter = new TestStatsReporter();
     private ScopeImpl scope;
-
-    private HistogramImpl histogram;
 
     @Before
     public void setUp() {
-        reporter = new TestStatsReporter();
         scope =
             new ScopeBuilder(null, new ScopeImpl.Registry())
+                .clock(clock)
                 .reporter(reporter)
                 .build();
     }
 
     @Test
     public void test() {
-        histogram = new HistogramImpl(scope, "histogram", ImmutableMap.EMPTY, ValueBuckets.custom(BUCKETS));
+        HistogramImpl histogram = new HistogramImpl(clock, scope, "histogram", ImmutableMap.EMPTY, ValueBuckets.custom(BUCKETS));
 
         double maxUpperBound = BUCKETS[BUCKETS.length - 1];
 
         List<Double> values =
                 IntStream.range(0, 10000)
                     .mapToDouble(ignored -> Math.random() * (maxUpperBound + 1))
-                    .mapToObj(a -> a)
+                    .boxed()
                     .collect(Collectors.toList());
 
         Map<Double, Long> expected = new HashMap<>();
@@ -100,14 +98,7 @@ public class HistogramImplTest {
     @Test
     public void recordValue() {
         Buckets buckets = ValueBuckets.linear(0, 10, 10);
-
-        histogram =
-            new HistogramImpl(
-                scope,
-            "",
-            null,
-            buckets
-            );
+        HistogramImpl histogram = new HistogramImpl(clock, scope, "", null, buckets);
 
         List<Double> log = new ArrayList<>();
 
@@ -126,22 +117,15 @@ public class HistogramImplTest {
         // Report will actually be fulfilled through scope
         scope.report(reporter);
 
-        assertEquals(new Long(3L), reporter.getValueSamples().get(10d));
-        assertEquals(new Long(5L), reporter.getValueSamples().get(60d));
+        assertEquals(Long.valueOf(3L), reporter.getValueSamples().get(10d));
+        assertEquals(Long.valueOf(5L), reporter.getValueSamples().get(60d));
         assertEquals(buckets, reporter.getBuckets());
     }
 
     @Test
     public void recordDuration() {
         Buckets buckets = DurationBuckets.linear(Duration.ZERO, Duration.ofMillis(10), 10);
-
-        histogram =
-            new HistogramImpl(
-                scope,
-            "",
-            null,
-            buckets
-            );
+        HistogramImpl histogram = new HistogramImpl(clock, scope, "", null, buckets);
 
         for (int i = 0; i < 3; i++) {
             histogram.recordDuration(Duration.ofMillis(Math.random() * 10));
@@ -154,44 +138,30 @@ public class HistogramImplTest {
         // Report will actually be fulfilled through scope
         scope.report(reporter);
 
-        assertEquals(new Long(3L), reporter.getDurationSamples().get(Duration.ofMillis(10)));
-        assertEquals(new Long(5L), reporter.getDurationSamples().get(Duration.ofMillis(60)));
+        assertEquals(Long.valueOf(3L), reporter.getDurationSamples().get(Duration.ofMillis(10)));
+        assertEquals(Long.valueOf(5L), reporter.getDurationSamples().get(Duration.ofMillis(60)));
         assertEquals(buckets, reporter.getBuckets());
     }
 
     @Test
     public void recordStopwatch() {
         Buckets buckets = DurationBuckets.linear(Duration.ZERO, Duration.ofMillis(10), 10);
-
-        histogram =
-            new HistogramImpl(
-                scope,
-            "",
-            null,
-            buckets
-            );
+        HistogramImpl histogram = new HistogramImpl(clock, scope, "", null, buckets);
 
         Stopwatch stopwatch = histogram.start();
-        assertNotNull(stopwatch);
+        clock.addDuration(Duration.ofMillis(5));
         stopwatch.stop();
 
         // Report will actually be fulfilled through scope
         scope.report(reporter);
 
-        assertEquals(new Long(1L), reporter.getDurationSamples().get(Duration.ofMillis(10)));
+        assertEquals(Long.valueOf(1L), reporter.getDurationSamples().get(Duration.ofMillis(10)));
     }
 
     @Test
     public void snapshotValues() {
         Buckets buckets = ValueBuckets.linear(0, 10, 10);
-
-        histogram =
-            new HistogramImpl(
-                scope,
-            "",
-            null,
-            buckets
-            );
+        HistogramImpl histogram = new HistogramImpl(clock, scope, "", null, buckets);
 
         for (int i = 0; i < 3; i++) {
             histogram.recordValue(Math.random() * 10);
@@ -220,14 +190,7 @@ public class HistogramImplTest {
     @Test
     public void snapshotValuesIsIdempotent() {
         ValueBuckets buckets = ValueBuckets.custom(0, 10);
-
-        histogram =
-                new HistogramImpl(
-                        scope,
-                        "",
-                        null,
-                        buckets
-                );
+        HistogramImpl histogram = new HistogramImpl(clock, scope, "", null, buckets);
 
         histogram.recordValue(5);
 
@@ -242,14 +205,7 @@ public class HistogramImplTest {
     @Test
     public void snapshotDurations() {
         Buckets buckets = DurationBuckets.linear(Duration.ZERO, Duration.ofMillis(10), 5);
-
-        histogram =
-            new HistogramImpl(
-                scope,
-            "",
-            null,
-            buckets
-            );
+        HistogramImpl histogram = new HistogramImpl(clock, scope, "", null, buckets);
 
         for (int i = 0; i < 3; i++) {
             histogram.recordDuration(Duration.ofMillis(Math.random() * 10));
@@ -273,14 +229,7 @@ public class HistogramImplTest {
     @Test
     public void snapshotDurationsIsIdempotent() {
         DurationBuckets buckets = DurationBuckets.custom(Duration.ofMillis(0), Duration.ofMillis(10));
-
-        histogram =
-                new HistogramImpl(
-                        scope,
-                        "",
-                        null,
-                        buckets
-                );
+        HistogramImpl histogram = new HistogramImpl(clock, scope, "", null, buckets);
 
         histogram.recordDuration(Duration.ofMillis(5));
 
