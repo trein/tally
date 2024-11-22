@@ -23,13 +23,6 @@ package com.uber.m3.tally;
 import com.uber.m3.util.Duration;
 import com.uber.m3.util.ImmutableMap;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReadWriteLock;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
-
 /**
  * Default implementation of a {@link Timer}.
  */
@@ -38,18 +31,12 @@ class TimerImpl implements Timer, StopwatchRecorder {
     private final String name;
     private final ImmutableMap<String, String> tags;
     private final StatsReporter reporter;
-    private final Values unreported = new Values();
 
     TimerImpl(MonotonicClock clock, String name, ImmutableMap<String, String> tags, StatsReporter reporter) {
         this.clock = clock;
         this.name = name;
         this.tags = tags;
-
-        if (reporter == null) {
-            this.reporter = new NoReporterSink();
-        } else {
-            this.reporter = reporter;
-        }
+        this.reporter = reporter;
     }
 
     @Override
@@ -70,86 +57,4 @@ class TimerImpl implements Timer, StopwatchRecorder {
     public void recordStopwatch(long stopwatchStart) {
         record(Duration.between(stopwatchStart, clock.nowNanos()));
     }
-
-    Duration[] snapshot() {
-        unreported.readLock().lock();
-
-        Duration[] snap = new Duration[unreported.getValues().size()];
-
-        for (int i = 0; i < unreported.getValues().size(); i++) {
-            snap[i] = unreported.getValues().get(i);
-        }
-
-        unreported.readLock().unlock();
-
-        return snap;
-    }
-
-    static class Values {
-        // Using a ReadWriteLock here to protect against multithreaded reads
-        // and writes separately. In other places, synchronized blocks are used
-        // instead as this separation is not needed e.g. we only lock a
-        // ConcurrentHashMap when doing writes and not for reads.
-        private final ReadWriteLock rwlock = new ReentrantReadWriteLock();
-        private List<Duration> values = new ArrayList<>();
-
-        Lock readLock() {
-            return rwlock.readLock();
-        }
-
-        Lock writeLock() {
-            return rwlock.writeLock();
-        }
-
-        public List<Duration> getValues() {
-            return values;
-        }
-    }
-
-    class NoReporterSink implements StatsReporter {
-        @Override
-        public Capabilities capabilities() {
-            return CapableOf.REPORTING_TAGGING;
-        }
-
-        @Override
-        public void flush() {
-            // No-op
-        }
-
-        @Override
-        public void close() {
-            // No-op
-        }
-
-        @Override
-        public void reportCounter(String name, Map<String, String> tags, long value) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public void reportGauge(String name, Map<String, String> tags, double value) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public void reportTimer(String name, Map<String, String> tags, Duration interval) {
-            unreported.writeLock().lock();
-
-            unreported.getValues().add(interval);
-
-            unreported.writeLock().unlock();
-        }
-
-        @Override
-        public void reportHistogramValueSamples(String name, Map<String, String> tags, Buckets buckets, double bucketLowerBound, double bucketUpperBound, long samples) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public void reportHistogramDurationSamples(String name, Map<String, String> tags, Buckets buckets, Duration bucketLowerBound, Duration bucketUpperBound, long samples) {
-            throw new UnsupportedOperationException();
-        }
-    }
-
 }

@@ -21,8 +21,10 @@
 package com.uber.m3.tally;
 
 import com.uber.m3.util.Duration;
+import com.uber.m3.util.ImmutableMap;
 import org.junit.Test;
 
+import static com.uber.m3.tally.ScopeImpl.keyForPrefixedStringMap;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 
@@ -48,42 +50,70 @@ public class TimerImplTest {
     }
 
     @Test
-    public void noReporterSinkSnapshot() {
-        TimerImpl timer = new TimerImpl(clock, "no-reporter-timer", null, null);
+    public void snapshotDuration() {
+        SnapshotBasedStatsReporter snapshotReporter = new SnapshotBasedStatsReporter();
+        ScopeImpl scope =
+            new ScopeBuilder(null, new ScopeImpl.Registry())
+                .reporter(snapshotReporter)
+                .clock(clock)
+                .build();
+        Timer timer = scope.timer("timer");
 
-        StatsReporter sink = timer.new NoReporterSink();
+        timer.record(Duration.ofMillis(42));
+        Snapshot snapshot1 = scope.snapshot();
 
-        // No-ops
-        sink.flush();
-        sink.close();
+        assertArrayEquals(
+            new Duration[]{Duration.ofMillis(42)},
+            getSnapshot(snapshot1, "timer").values());
 
-        assertEquals(CapableOf.REPORTING_TAGGING, sink.capabilities());
-        sink.reportTimer("new-timer", null, Duration.ofMillis(888));
+        timer.record(Duration.ofMillis(3));
+        timer.record(Duration.ofMillis(2));
+        timer.record(Duration.ofMillis(1));
+        Snapshot snapshot2 = scope.snapshot();
 
-        assertArrayEquals(new Duration[]{Duration.ofMillis(888)}, timer.snapshot());
+        assertArrayEquals(
+            new Duration[]{Duration.ofMillis(3), Duration.ofMillis(2), Duration.ofMillis(1)},
+            getSnapshot(snapshot2, "timer").values());
     }
 
-    @Test(expected = UnsupportedOperationException.class)
-    public void unsupportedCounter() {
-        StatsReporter sink = new TimerImpl(clock, "", null, null).new NoReporterSink();
-        sink.reportCounter(null, null, 0);
+    @Test
+    public void snapshotStopwatch() {
+        SnapshotBasedStatsReporter snapshotReporter = new SnapshotBasedStatsReporter();
+        ScopeImpl scope =
+            new ScopeBuilder(null, new ScopeImpl.Registry())
+                .reporter(snapshotReporter)
+                .clock(clock)
+                .build();
+        Timer timer = scope.timer("timer");
+
+        {
+            Stopwatch stopwatch = timer.start();
+            clock.addNanos(100);
+            stopwatch.stop();
+        }
+        Snapshot snapshot1 = scope.snapshot();
+        assertArrayEquals(
+            new Duration[]{Duration.ofNanos(100)},
+            getSnapshot(snapshot1, "timer").values());
+
+        {
+            Stopwatch stopwatch = timer.start();
+            clock.addNanos(200);
+            stopwatch.stop();
+        }
+        {
+            Stopwatch stopwatch = timer.start();
+            clock.addNanos(150);
+            stopwatch.stop();
+        }
+        Snapshot snapshot2 = scope.snapshot();
+        assertArrayEquals(
+            new Duration[]{Duration.ofNanos(200), Duration.ofNanos(150)},
+            getSnapshot(snapshot2, "timer").values());
     }
 
-    @Test(expected = UnsupportedOperationException.class)
-    public void unsupportedGauge() {
-        StatsReporter sink = new TimerImpl(clock, "", null, null).new NoReporterSink();
-        sink.reportGauge(null, null, 0);
-    }
-
-    @Test(expected = UnsupportedOperationException.class)
-    public void unsupportedHistogramValue() {
-        StatsReporter sink = new TimerImpl(clock, "", null, null).new NoReporterSink();
-        sink.reportHistogramValueSamples(null, null, null, 0, 0, 0);
-    }
-
-    @Test(expected = UnsupportedOperationException.class)
-    public void unsupportedHistogramDuration() {
-        StatsReporter sink = new TimerImpl(clock, "", null, null).new NoReporterSink();
-        sink.reportHistogramDurationSamples(null, null, null, null, null, 0);
+    private static TimerSnapshot getSnapshot(Snapshot snapshot, String name) {
+        ScopeKey key = keyForPrefixedStringMap(name, ImmutableMap.EMPTY);
+        return snapshot.timers().get(key);
     }
 }

@@ -42,30 +42,34 @@ class CounterImpl extends MetricBase implements Counter, Reportable {
         curr.getAndAdd(delta);
     }
 
+    @Override
+    public void report(ImmutableMap<String, String> tags, StatsReporter reporter) {
+        long delta = snapshot();
+        if (reporter instanceof SnapshotBasedStatsReporter) {
+            // Always report snapshots.
+            reporter.reportCounter(getQualifiedName(), tags, delta);
+        } else if (delta != 0) {
+            // Only report deltas if they are non-zero. NOTE: we call value() here to update the previous value.
+            reporter.reportCounter(getQualifiedName(), tags, value());
+        }
+    }
+
+    /**
+     * Returns the delta between the current and previous values. NOTE: This method has side effects.
+     */
     long value() {
         long current = curr.get();
         long previous = prev.get();
-
         if (current == previous) {
             return 0;
         }
-
         prev.set(current);
-
         return current - previous;
     }
 
-    @Override
-    public void report(ImmutableMap<String, String> tags, StatsReporter reporter) {
-        long delta = value();
-
-        if (delta == 0) {
-            return;
-        }
-
-        reporter.reportCounter(getQualifiedName(), tags, delta);
-    }
-
+    /**
+     * Returns the difference between the current and previous values without mutating counters.
+     */
     long snapshot() {
         return curr.get() - prev.get();
     }

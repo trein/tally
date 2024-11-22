@@ -20,9 +20,11 @@
 
 package com.uber.m3.tally;
 
+import com.uber.m3.util.ImmutableMap;
 import org.junit.Before;
 import org.junit.Test;
 
+import static com.uber.m3.tally.ScopeImpl.keyForPrefixedStringMap;
 import static org.junit.Assert.assertEquals;
 
 public class GaugeImplTest {
@@ -30,7 +32,6 @@ public class GaugeImplTest {
 
     private TestStatsReporter reporter;
     private GaugeImpl gauge;
-
     private ScopeImpl scope;
 
     @Before
@@ -79,11 +80,25 @@ public class GaugeImplTest {
 
     @Test
     public void snapshot() {
+        ScopeImpl scope =
+            new ScopeBuilder(null, new ScopeImpl.Registry())
+                .reporter(new SnapshotBasedStatsReporter())
+                .build();
+        Gauge gauge = new GaugeImpl(scope, "gauge");
+
         gauge.update(70);
-        assertEquals(70, gauge.snapshot(), EPSILON);
+        Snapshot snapshot = scope.snapshot();
+        assertEquals(70, getSnapshot(snapshot, "gauge").value(), EPSILON);
 
         gauge.update(71);
         gauge.update(72);
-        assertEquals(72, gauge.snapshot(), EPSILON);
+        Snapshot snapshot1 = scope.snapshot();
+
+        assertEquals(72, getSnapshot(snapshot1, "gauge").value(), EPSILON);
+    }
+
+    private static GaugeSnapshot getSnapshot(Snapshot snapshot, String name) {
+        ScopeKey key = keyForPrefixedStringMap(name, ImmutableMap.EMPTY);
+        return snapshot.gauges().get(key);
     }
 }

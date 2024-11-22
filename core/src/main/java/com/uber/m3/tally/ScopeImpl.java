@@ -23,7 +23,6 @@ package com.uber.m3.tally;
 import com.uber.m3.util.ImmutableMap;
 
 import javax.annotation.Nullable;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Map;
 import java.util.Optional;
@@ -160,7 +159,7 @@ class ScopeImpl implements Scope, TestScope {
     }
 
     String fullyQualifiedName(String name) {
-        if (prefix == null || prefix.length() == 0) {
+        if (prefix == null || prefix.isEmpty()) {
             return name;
         }
 
@@ -168,88 +167,21 @@ class ScopeImpl implements Scope, TestScope {
     }
 
     /**
-     * Snapshot returns a copy of all values since the last report execution
+     * Snapshot returns a copy of all values since the last report execution.
      * This is an expensive operation and should only be used for testing purposes.
      *
      * @return a {@link Snapshot} of this {@link Scope}
      */
     @Override
     public Snapshot snapshot() {
-        Snapshot snap = new SnapshotImpl();
-
-        ArrayList<ScopeImpl> scopes = new ArrayList<>();
-        scopes.add(this);
-        scopes.addAll(registry.subscopes.values());
-
-        for (ScopeImpl subscope : scopes) {
-            ImmutableMap<String, String> tags = new ImmutableMap.Builder<String, String>()
-                .putAll(this.tags)
-                .putAll(subscope.tags)
-                .build();
-
-            for (Map.Entry<String, CounterImpl> counter : subscope.counters.entrySet()) {
-                String name = subscope.fullyQualifiedName(counter.getKey());
-
-                ScopeKey scopeKey = keyForPrefixedStringMap(name, tags);
-
-                snap.counters().put(
-                    scopeKey,
-                    new CounterSnapshotImpl(
-                        name,
-                        tags,
-                        counter.getValue().snapshot()
-                    )
-                );
-            }
-
-            for (Map.Entry<String, GaugeImpl> gauge : subscope.gauges.entrySet()) {
-                String name = subscope.fullyQualifiedName(gauge.getKey());
-
-                ScopeKey scopeKey = keyForPrefixedStringMap(name, tags);
-
-                snap.gauges().put(
-                    scopeKey,
-                    new GaugeSnapshotImpl(
-                        name,
-                        tags,
-                        gauge.getValue().snapshot()
-                    )
-                );
-            }
-
-            for (Map.Entry<String, TimerImpl> timer : subscope.timers.entrySet()) {
-                String name = subscope.fullyQualifiedName(timer.getKey());
-
-                ScopeKey scopeKey = keyForPrefixedStringMap(name, tags);
-
-                snap.timers().put(
-                    scopeKey,
-                    new TimerSnapshotImpl(
-                        name,
-                        tags,
-                        timer.getValue().snapshot()
-                    )
-                );
-            }
-
-            for (Map.Entry<String, HistogramImpl> histogram : subscope.histograms.entrySet()) {
-                String name = subscope.fullyQualifiedName(histogram.getKey());
-
-                ScopeKey scopeKey = keyForPrefixedStringMap(name, tags);
-
-                snap.histograms().put(
-                    scopeKey,
-                    new HistogramSnapshotImpl(
-                        name,
-                        tags,
-                        histogram.getValue().snapshotValues(),
-                        histogram.getValue().snapshotDurations()
-                    )
-                );
-            }
+        if (!(reporter instanceof SnapshotBasedStatsReporter)) {
+            throw new IllegalStateException("Snapshots can only be computer when using a SnapshotBasedStatsReporter");
         }
-
-        return snap;
+        // We will create snapshots leveraging the reporting mechanism.
+        // NOTE: Timers report directly to the reporter, so they are not handled by the report methods here.
+        report(reporter);
+        reportLoopIteration();
+        return ((SnapshotBasedStatsReporter) reporter).getFlushedSnapshot();
     }
 
     // Helper function used to create subscopes
@@ -331,7 +263,7 @@ class ScopeImpl implements Scope, TestScope {
     }
 
     static class Registry {
-        Map<ScopeKey, ScopeImpl> subscopes = new ConcurrentHashMap<>();
+        final Map<ScopeKey, ScopeImpl> subscopes = new ConcurrentHashMap<>();
     }
 
 }
