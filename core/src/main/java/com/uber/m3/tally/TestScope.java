@@ -34,7 +34,7 @@ public interface TestScope extends Scope {
      */
     static TestScope create() {
         return new RootScopeBuilder()
-            .reporter(new NullStatsReporter())
+            .reporter(new SnapshotBasedStatsReporter())
             .build();
     }
 
@@ -45,7 +45,7 @@ public interface TestScope extends Scope {
     static TestScope create(MonotonicClock clock) {
         return new RootScopeBuilder()
             .clock(clock)
-            .reporter(new NullStatsReporter())
+            .reporter(new SnapshotBasedStatsReporter())
             .build();
     }
 
@@ -57,7 +57,7 @@ public interface TestScope extends Scope {
         return new RootScopeBuilder()
             .prefix(prefix)
             .tags(tags)
-            .reporter(new NullStatsReporter())
+            .reporter(new SnapshotBasedStatsReporter())
             .build();
     }
 
@@ -70,7 +70,7 @@ public interface TestScope extends Scope {
             .clock(clock)
             .prefix(prefix)
             .tags(tags)
-            .reporter(new NullStatsReporter())
+            .reporter(new SnapshotBasedStatsReporter())
             .build();
     }
 
